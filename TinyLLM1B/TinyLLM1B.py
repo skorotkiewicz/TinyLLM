@@ -2,7 +2,7 @@
 # requires-python = ">=3.11,<3.14"
 # dependencies = ["torch>=2.6,<3", "transformers==4.57.3", "datasets>=4,<5", "accelerate>=1.2,<2"]
 # ///
-"""Random-weight 1B Llama: pretrain, chat-tune, then chat. Nothing runs on import."""
+"""Random-weight 100M/1B Llama: pretrain, chat-tune, then chat. Nothing runs on import."""
 
 import argparse
 from pathlib import Path
@@ -12,6 +12,8 @@ SYSTEM = "You are a helpful assistant."
 ARCH = dict(vocab_size=49152, hidden_size=2048, intermediate_size=5632,
             num_hidden_layers=20, num_attention_heads=32, num_key_value_heads=8,
             max_position_embeddings=2048, tie_word_embeddings=True)
+ARCHS = {"1b": ARCH, "100m": dict(ARCH, hidden_size=640, intermediate_size=1728,
+                                num_hidden_layers=16, num_attention_heads=10, num_key_value_heads=2)}
 
 
 def with_system(messages, system=SYSTEM):
@@ -70,10 +72,11 @@ def train(args):
     if source:
         model = LlamaForCausalLM.from_pretrained(source, local_files_only=True, torch_dtype=torch.float32)
     else:
-        if len(tokenizer) != ARCH["vocab_size"]:
+        arch = ARCHS[args.size]
+        if len(tokenizer) != arch["vocab_size"]:
             raise ValueError("Tokenizer vocabulary changed; expected 49152 tokens.")
         model = LlamaForCausalLM(LlamaConfig(
-            **ARCH, bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id,
+            **arch, bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id))
     model.config.use_cache = False
     context = model.config.max_position_embeddings
@@ -148,6 +151,8 @@ def chat(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=["pretrain", "sft", "chat"])
+    parser.add_argument("--size", choices=ARCHS, default="1b",
+                        help="Fresh pretraining size, default: 1b. Saved models use their own config.")
     parser.add_argument("--model", help="Local trained model directory, required for sft/chat")
     parser.add_argument("--output", help="Training output directory, must be empty unless resuming")
     parser.add_argument("--resume", help="Local Trainer checkpoint inside --output")

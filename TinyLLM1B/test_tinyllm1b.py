@@ -21,14 +21,28 @@ class Tokenizer:
 
 
 class Checks(unittest.TestCase):
-    def test_architecture_has_one_billion_parameters(self):
-        c = llm.ARCH
-        h = c["hidden_size"]
-        kv = h // c["num_attention_heads"] * c["num_key_value_heads"]
-        per_layer = 2 * h * h + 2 * h * kv + 3 * h * c["intermediate_size"] + 2 * h
-        total = c["vocab_size"] * h + c["num_hidden_layers"] * per_layer + h
-        self.assertTrue(c["tie_word_embeddings"])
-        self.assertEqual(total, 1_002_522_624)
+    def test_architecture_parameter_counts(self):
+        for size, expected in [("1b", 1_002_522_624), ("100m", 100_291_200)]:
+            with self.subTest(size=size):
+                c = llm.ARCHS[size]
+                h = c["hidden_size"]
+                self.assertEqual(h % c["num_attention_heads"], 0)
+                self.assertEqual(c["num_attention_heads"] % c["num_key_value_heads"], 0)
+                kv = h // c["num_attention_heads"] * c["num_key_value_heads"]
+                per_layer = 2 * h * h + 2 * h * kv + 3 * h * c["intermediate_size"] + 2 * h
+                total = c["vocab_size"] * h + c["num_hidden_layers"] * per_layer + h
+                self.assertTrue(c["tie_word_embeddings"])
+                self.assertEqual(total, expected)
+
+    def test_cli_selects_size_without_starting_training(self):
+        for options, size in [([], "1b"), (["--size", "100m"], "100m")]:
+            argv = ["TinyLLM1B.py", "pretrain", "--output", "unused", "--steps", "30000", *options]
+            with self.subTest(size=size), patch.object(sys, "argv", argv), patch.object(llm, "train") as train:
+                llm.main()
+                train.assert_called_once()
+                args = train.call_args.args[0]
+                self.assertEqual(args.size, size)
+                self.assertEqual(args.steps, 30000)
 
     def test_pretraining_packs_across_documents_with_eos(self):
         rows = ({"text": text} for text in ["ab", "cd", "ef"])
@@ -72,7 +86,8 @@ class Checks(unittest.TestCase):
             llm.fit_history(messages, tokenizer, len(expected) - 1)
 
     def test_invalid_commands_never_reach_training(self):
-        for argv in [["sft"], ["chat"], ["pretrain"], ["pretrain", "--output", "unused", "--steps", "0"]]:
+        for argv in [["sft"], ["chat"], ["pretrain"], ["pretrain", "--output", "unused", "--steps", "0"],
+                     ["pretrain", "--output", "unused", "--size", "10m"]]:
             with self.subTest(argv=argv), patch.object(sys, "argv", ["TinyLLM1B.py", *argv]), \
                     patch.object(llm, "train") as train, patch("sys.stderr"):
                 with self.assertRaises(SystemExit) as error:
