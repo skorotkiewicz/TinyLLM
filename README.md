@@ -7,6 +7,7 @@ Rust + Odin: with love). Training corpus: "mama dad mama cat dad mama dog".
 
 **Rust** (needs cargo):
 ```sh
+python3 TinyLLM.py && node TinyLLM.js
 cd rust && cargo run
 ```
 
