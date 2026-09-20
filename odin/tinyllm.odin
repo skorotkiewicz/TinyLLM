@@ -11,9 +11,11 @@ main :: proc() {
 	words := strings.fields(text)
 
 	// train: word -> [next words]
-	model := make(map[string][]string)
+	model := make(map[string][dynamic]string)
 	for i in 0 ..< len(words) - 1 {
-		model[words[i]] = append(model[words[i]], words[i + 1])
+		nexts := model[words[i]]
+		append(&nexts, words[i + 1])
+		model[words[i]] = nexts
 	}
 
 	// generate: random walk
@@ -21,11 +23,12 @@ main :: proc() {
 	fmt.print(word)
 	for _ in 0 ..< 10 {
 		if choices, ok := model[word]; ok {
-			word = choices[rand.uint64() % uint64(len(choices))]
+			word = choices[rand.uint64() % u64(len(choices))]
 		} else {
-			word = words[rand.uint64() % uint64(len(words))]
+			word = words[rand.uint64() % u64(len(words))]
 		}
-		fmt.print(" {}", word)
+		fmt.print(" ")
+		fmt.print(word)
 	}
 	fmt.println()
 }
